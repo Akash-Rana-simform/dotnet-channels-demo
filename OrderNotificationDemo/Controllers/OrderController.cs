@@ -8,31 +8,24 @@ namespace OrderNotificationDemo.Controllers;
 
 [ApiController]
 [Route("api/orders")]
-public class OrderController : ControllerBase
+public class OrderController(
+    Channel<EmailMessage> emailChannel,
+    IEmailService emailService,
+    ChannelCapacityOptions channelCapacity) : ControllerBase
 {
-    // Must match the BoundedChannelOptions capacity registered in Program.cs.
-    private const int ChannelCapacity = 5;
-
-    private readonly Channel<EmailMessage> _channel;
-    private readonly IEmailService _emailService;
-
-    public OrderController(Channel<EmailMessage> channel, IEmailService emailService)
-    {
-        _channel = channel;
-        _emailService = emailService;
-    }
-
     [HttpPost]
-    public async Task<IActionResult> PlaceOrder([FromBody] OrderDto order, CancellationToken cancellationToken)
+    public async Task<IActionResult> PlaceOrder([FromBody] OrderDto dto, CancellationToken cancellationToken)
     {
-        var orderId = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
-        var email = new EmailMessage(order.Email, "Order Confirmation", $"Hi {order.Name}, your order {orderId} is confirmed!");
-
-        await _channel.Writer.WriteAsync(email, cancellationToken);
+        var orderId = Guid.NewGuid().ToString("N")[..8];
+        // Drop email into the channel and move on
+        await emailChannel.Writer.WriteAsync(new EmailMessage(
+            dto.Email,
+            $"Order {orderId} confirmed",
+            $"Hi {dto.Name}, your order is on its way!"), cancellationToken);
 
         LogOrderPlaced(orderId);
 
-        return Ok(new { OrderId = orderId, Status = "Queued" });
+        return Ok(new { OrderId = orderId, Status = "Confirmed" });
     }
 
     [HttpPost("burst")]
@@ -42,29 +35,29 @@ public class OrderController : ControllerBase
 
         for (var i = 0; i < count; i++)
         {
-            var orderId = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
-            var email = new EmailMessage($"user{i + 1}@test.com", "Order Confirmation", $"Order {orderId} confirmed!");
+            var orderId = Guid.NewGuid().ToString("N")[..8];
+            var email = new EmailMessage($"user{i + 1}@test.com", $"Order {orderId} confirmed", $"Order {orderId} confirmed!");
 
-            await _channel.Writer.WriteAsync(email, cancellationToken);
+            await emailChannel.Writer.WriteAsync(email, cancellationToken);
             orderIds.Add(orderId);
 
             LogOrderPlaced(orderId);
         }
 
-        return Ok(new { Count = count, OrderIds = orderIds, Status = "Queued" });
+        return Ok(new { Count = count, OrderIds = orderIds, Status = "Confirmed" });
     }
 
     [HttpPost("slow")]
-    public async Task<IActionResult> PlaceOrderSlow([FromBody] OrderDto order, CancellationToken cancellationToken)
+    public async Task<IActionResult> PlaceOrderSlow([FromBody] OrderDto dto, CancellationToken cancellationToken)
     {
-        var orderId = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
-        var email = new EmailMessage(order.Email, "Order Confirmation", $"Hi {order.Name}, your order {orderId} is confirmed!");
+        var orderId = Guid.NewGuid().ToString("N")[..8];
+        var email = new EmailMessage(dto.Email, $"Order {orderId} confirmed", $"Hi {dto.Name}, your order is on its way!");
 
         var stopwatch = Stopwatch.StartNew();
-        await _emailService.SendAsync(email, cancellationToken);
+        await emailService.SendAsync(email, cancellationToken);
         stopwatch.Stop();
 
-        return Ok(new { OrderId = orderId, Status = "Sent", ElapsedMs = stopwatch.ElapsedMilliseconds });
+        return Ok(new { OrderId = orderId, Status = "Confirmed", ElapsedMs = stopwatch.ElapsedMilliseconds });
     }
 
     [HttpGet("channel-status")]
@@ -72,9 +65,9 @@ public class OrderController : ControllerBase
     {
         return Ok(new
         {
-            QueueCount = _channel.Reader.Count,
-            Capacity = ChannelCapacity,
-            IsCompleted = _channel.Reader.Completion.IsCompleted
+            QueueCount = emailChannel.Reader.Count,
+            Capacity = channelCapacity.Capacity,
+            IsCompleted = emailChannel.Reader.Completion.IsCompleted
         });
     }
 
@@ -83,7 +76,7 @@ public class OrderController : ControllerBase
         var timestamp = DateTime.Now.ToString("HH:mm:ss");
         var originalColor = Console.ForegroundColor;
         Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine($"[{timestamp}] 🟢 Order {orderId} placed — email queued (Queue: {_channel.Reader.Count}/{ChannelCapacity})");
+        Console.WriteLine($"[{timestamp}] 🟢 Order {orderId} placed — email queued (Queue: {emailChannel.Reader.Count}/{channelCapacity.Capacity})");
         Console.ForegroundColor = originalColor;
     }
 }

@@ -3,26 +3,29 @@ using OrderNotificationDemo.Models;
 
 namespace OrderNotificationDemo.Services;
 
-public class EmailWorker : BackgroundService
+public class EmailWorker(
+    Channel<EmailMessage> channel,
+    IEmailService emailService,
+    ILogger<EmailWorker> logger) : BackgroundService
 {
-    private readonly Channel<EmailMessage> _channel;
-    private readonly IEmailService _emailService;
-
-    public EmailWorker(Channel<EmailMessage> channel, IEmailService emailService)
-    {
-        _channel = channel;
-        _emailService = emailService;
-    }
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine("[EmailWorker] Started — waiting for emails on the channel...");
         Console.ResetColor();
 
-        await foreach (var message in _channel.Reader.ReadAllAsync(stoppingToken))
+        // One failed email must not kill the worker — without this try/catch, an
+        // exception here would end ExecuteAsync and the channel would stop being drained.
+        await foreach (var message in channel.Reader.ReadAllAsync(stoppingToken))
         {
-            await _emailService.SendAsync(message, stoppingToken);
+            try
+            {
+                await emailService.SendAsync(message, stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Email failed for {To}", message.To);
+            }
         }
     }
 }
