@@ -34,6 +34,7 @@ public class OrderController(
     [HttpPost("burst")]
     public async Task<IActionResult> Burst([FromQuery] int count = 10, CancellationToken cancellationToken = default)
     {
+        var stopwatch = Stopwatch.StartNew();
         var orderIds = new List<string>();
 
         for (var i = 0; i < count; i++)
@@ -47,7 +48,9 @@ public class OrderController(
             LogOrderPlaced(orderId);
         }
 
-        return Ok(new { Count = count, OrderIds = orderIds, Status = "Confirmed" });
+        stopwatch.Stop();
+
+        return Ok(new { Count = count, OrderIds = orderIds, Status = "Confirmed", ElapsedSeconds = Math.Round(stopwatch.Elapsed.TotalSeconds, 2) });
     }
 
     [HttpPost("slow")]
