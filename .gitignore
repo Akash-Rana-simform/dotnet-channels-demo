@@ -4,3 +4,8 @@ obj/
 .vs/
 *.log
 *.pid
+
+# personal presenter scripts - local use only, not for the public repo
+SCRIPT_15MIN.txt
+DEMO_SCRIPT.md
+DEMO_SCRIPT.txt
