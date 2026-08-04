@@ -16,6 +16,8 @@ public class OrderController(
     [HttpPost]
     public async Task<IActionResult> PlaceOrder([FromBody] OrderDto dto, CancellationToken cancellationToken)
     {
+        var stopwatch = Stopwatch.StartNew();
+
         var orderId = Guid.NewGuid().ToString("N")[..8];
         // Drop email into the channel and move on
         await emailChannel.Writer.WriteAsync(new EmailMessage(
@@ -24,8 +26,9 @@ public class OrderController(
             $"Hi {dto.Name}, your order is on its way!"), cancellationToken);
 
         LogOrderPlaced(orderId);
+        stopwatch.Stop();
 
-        return Ok(new { OrderId = orderId, Status = "Confirmed" });
+        return Ok(new { OrderId = orderId, Status = "Confirmed", ElapsedSeconds = Math.Round(stopwatch.Elapsed.TotalSeconds, 2) });
     }
 
     [HttpPost("burst")]
@@ -57,7 +60,7 @@ public class OrderController(
         await emailService.SendAsync(email, cancellationToken);
         stopwatch.Stop();
 
-        return Ok(new { OrderId = orderId, Status = "Confirmed", ElapsedMs = stopwatch.ElapsedMilliseconds });
+        return Ok(new { OrderId = orderId, Status = "Confirmed", ElapsedSeconds = Math.Round(stopwatch.Elapsed.TotalSeconds, 2) });
     }
 
     [HttpGet("channel-status")]
