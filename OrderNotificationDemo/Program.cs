@@ -53,11 +53,10 @@ builder.Services.AddHostedService<EmailWorker>();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// Always on (not gated behind Development) so Swagger works no matter how this
+// demo gets launched — dotnet run, an IDE's Run/Debug button, or the built .dll directly.
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 app.MapControllers();
